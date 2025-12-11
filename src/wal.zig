@@ -18,6 +18,8 @@ pub const PendingOp = struct {
     primary_buffer: []u8,
     secondary_buffer: []u8,
     verify_buffer: []u8,
+    primary_fsync_done: bool,
+    secondary_fsync_done: bool,
 
     pub const Stage = enum {
         writing,
@@ -61,6 +63,8 @@ pub const WAL = struct {
         // Open primary WAL file
         const flags = posix.O{
             .CREAT = true,
+            .ACCMODE = .RDWR,
+            .DSYNC = true,
         };
         const mode = 0o644;
 
@@ -149,6 +153,8 @@ pub const WAL = struct {
             .primary_buffer = primary_buffer,
             .secondary_buffer = secondary_buffer,
             .verify_buffer = verify_buffer,
+            .primary_fsync_done = false,
+            .secondary_fsync_done = false,
         });
 
         // Submit write chains for both WAL files
@@ -233,12 +239,12 @@ pub const WAL = struct {
 // Tests
 test "wal initialize and deinitialize" {
     const allocator = std.testing.allocator;
-    var tmp_dir = try std.fs.cwd().makeOpenPath("test_wal_tmp", .{});
+    var tmp_dir = try std.fs.cwd().makeOpenPath("wal_test_tmp", .{});
     defer tmp_dir.close();
-    defer std.fs.cwd().deleteTree("test_wal_tmp") catch {};
+    defer std.fs.cwd().deleteTree("wal_test_tmp") catch {};
 
-    const primary_path = "test_wal_tmp/primary.wal";
-    const secondary_path = "test_wal_tmp/secondary.wal";
+    const primary_path = "wal_test_tmp/primary.wal";
+    const secondary_path = "wal_test_tmp/secondary.wal";
 
     const wal = try WAL.init(allocator, primary_path, secondary_path, 16);
     defer wal.deinit();
@@ -249,12 +255,12 @@ test "wal initialize and deinitialize" {
 
 test "wal append creates pending operation" {
     const allocator = std.testing.allocator;
-    var tmp_dir = try std.fs.cwd().makeOpenPath("test_wal_append", .{});
+    var tmp_dir = try std.fs.cwd().makeOpenPath("wal_test_append", .{});
     defer tmp_dir.close();
-    defer std.fs.cwd().deleteTree("test_wal_append") catch {};
+    defer std.fs.cwd().deleteTree("wal_test_append") catch {};
 
-    const primary_path = "test_wal_append/primary.wal";
-    const secondary_path = "test_wal_append/secondary.wal";
+    const primary_path = "wal_test_append/primary.wal";
+    const secondary_path = "wal_test_append/secondary.wal";
 
     const wal = try WAL.init(allocator, primary_path, secondary_path, 16);
     defer wal.deinit();
@@ -276,12 +282,12 @@ test "wal append creates pending operation" {
 
 test "wal append buffers are padded" {
     const allocator = std.testing.allocator;
-    var tmp_dir = try std.fs.cwd().makeOpenPath("test_wal_aligned", .{});
+    var tmp_dir = try std.fs.cwd().makeOpenPath("wal_test_aligned", .{});
     defer tmp_dir.close();
-    defer std.fs.cwd().deleteTree("test_wal_aligned") catch {};
+    defer std.fs.cwd().deleteTree("wal_test_aligned") catch {};
 
-    const primary_path = "test_wal_aligned/primary.wal";
-    const secondary_path = "test_wal_aligned/secondary.wal";
+    const primary_path = "wal_test_aligned/primary.wal";
+    const secondary_path = "wal_test_aligned/secondary.wal";
 
     const wal = try WAL.init(allocator, primary_path, secondary_path, 16);
     defer wal.deinit();
@@ -297,12 +303,12 @@ test "wal append buffers are padded" {
 
 test "wal append buffers match" {
     const allocator = std.testing.allocator;
-    var tmp_dir = try std.fs.cwd().makeOpenPath("test_wal_match", .{});
+    var tmp_dir = try std.fs.cwd().makeOpenPath("wal_test_match", .{});
     defer tmp_dir.close();
-    defer std.fs.cwd().deleteTree("test_wal_match") catch {};
+    defer std.fs.cwd().deleteTree("wal_test_match") catch {};
 
-    const primary_path = "test_wal_match/primary.wal";
-    const secondary_path = "test_wal_match/secondary.wal";
+    const primary_path = "wal_test_match/primary.wal";
+    const secondary_path = "wal_test_match/secondary.wal";
 
     const wal = try WAL.init(allocator, primary_path, secondary_path, 16);
     defer wal.deinit();
@@ -316,12 +322,12 @@ test "wal append buffers match" {
 
 test "wal single append and flush" {
     const allocator = std.testing.allocator;
-    var tmp_dir = try std.fs.cwd().makeOpenPath("test_wal_flush", .{});
+    var tmp_dir = try std.fs.cwd().makeOpenPath("wal_test_flush", .{});
     defer tmp_dir.close();
-    defer std.fs.cwd().deleteTree("test_wal_flush") catch {};
+    defer std.fs.cwd().deleteTree("wal_test_flush") catch {};
 
-    const primary_path = "test_wal_flush/primary.wal";
-    const secondary_path = "test_wal_flush/secondary.wal";
+    const primary_path = "wal_test_flush/primary.wal";
+    const secondary_path = "wal_test_flush/secondary.wal";
 
     const wal = try WAL.init(allocator, primary_path, secondary_path, 64);
     defer wal.deinit();
@@ -338,12 +344,12 @@ test "wal single append and flush" {
 
 test "wal multiple appends and flush" {
     const allocator = std.testing.allocator;
-    var tmp_dir = try std.fs.cwd().makeOpenPath("test_wal_multi", .{});
+    var tmp_dir = try std.fs.cwd().makeOpenPath("wal_test_multi", .{});
     defer tmp_dir.close();
-    defer std.fs.cwd().deleteTree("test_wal_multi") catch {};
+    defer std.fs.cwd().deleteTree("wal_test_multi") catch {};
 
-    const primary_path = "test_wal_multi/primary.wal";
-    const secondary_path = "test_wal_multi/secondary.wal";
+    const primary_path = "wal_test_multi/primary.wal";
+    const secondary_path = "wal_test_multi/secondary.wal";
 
     const wal = try WAL.init(allocator, primary_path, secondary_path, 64);
     defer wal.deinit();
@@ -363,12 +369,12 @@ test "wal multiple appends and flush" {
 
 test "wal files created with correct permissions" {
     const allocator = std.testing.allocator;
-    var tmp_dir = try std.fs.cwd().makeOpenPath("test_wal_perms", .{});
+    var tmp_dir = try std.fs.cwd().makeOpenPath("wal_test_perms", .{});
     defer tmp_dir.close();
-    defer std.fs.cwd().deleteTree("test_wal_perms") catch {};
+    defer std.fs.cwd().deleteTree("wal_test_perms") catch {};
 
-    const primary_path = "test_wal_perms/primary.wal";
-    const secondary_path = "test_wal_perms/secondary.wal";
+    const primary_path = "wal_test_perms/primary.wal";
+    const secondary_path = "wal_test_perms/secondary.wal";
 
     const wal = try WAL.init(allocator, primary_path, secondary_path, 16);
     defer wal.deinit();

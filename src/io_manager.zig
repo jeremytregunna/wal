@@ -115,22 +115,27 @@ pub fn process_completions(
         // Update stage based on which operation completed
         switch (decoded.tag) {
             .primary_write, .secondary_write => {
-                // Write completed, expecting fsync next
-                // No stage change yet, fsync will complete the syncing phase
+                // Write completed, fsync will follow via linked SQE
+                // No stage change needed - still in writing phase
             },
-            .primary_fsync, .secondary_fsync => {
-                // Fsync completed, move to verification
-                // Both fsyncs must complete before we verify
-                if (decoded.tag == .primary_fsync) {
-                    op.stage = .verifying;
-                } else {
-                    // secondary_fsync completes, but we'll verify once primary is done
-                    op.stage = .verifying;
+            .primary_fsync => {
+                // Primary fsync completed
+                op.primary_fsync_done = true;
+                // Mark completed only after both fsyncs finish
+                if (op.secondary_fsync_done) {
+                    op.stage = .completed;
+                }
+            },
+            .secondary_fsync => {
+                // Secondary fsync completed
+                op.secondary_fsync_done = true;
+                // Mark completed only after both fsyncs finish
+                if (op.primary_fsync_done) {
+                    op.stage = .completed;
                 }
             },
             .primary_verify, .secondary_verify => {
-                // Verify read completed
-                // Both verifies must succeed before marking completed
+                // Verify read completed (if used)
                 op.stage = .completed;
             },
         }
